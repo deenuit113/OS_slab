@@ -13,7 +13,6 @@ struct test{
 };
 
 void slabtest(){
-#if 1
 	int i;
 	struct test *t[NTEST];
 
@@ -30,7 +29,7 @@ void slabtest(){
 	for(i=NTEST-1;i>=0;i--){
 		kmfree((char *)t[i]);
 	}
-#endif
+
 	slabdump();
 }
 

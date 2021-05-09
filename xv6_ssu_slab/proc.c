@@ -7,7 +7,7 @@
 #include "proc.h"
 #include "spinlock.h"
 
-//#define DALLOC
+#define DALLOC
 
 #ifdef DALLOC
 struct {
@@ -97,16 +97,17 @@ allocproc(void)
 
   acquire(&ptable.lock);
 
-  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
-    if(p->state == UNUSED)
-      goto found;
-
-  release(&ptable.lock);
-  return 0;
-
-found:
-  p->state = EMBRYO;
-  p->pid = nextpid++;
+  p = (struct proc*) kmalloc(sizeof(struct proc));
+  if(p==0) {
+	  release(&ptable.lock);
+	  return 0;
+  }
+  //allocated
+  memset(p, 0, sizeof(struct proc));
+  p -> state = EMBRYO;
+  p -> pid = nextpid++;
+  p -> prev = 0;
+  p -> next = 0;
 
   release(&ptable.lock);
 
@@ -167,7 +168,9 @@ userinit(void)
   // because the assignment might not be atomic.
   acquire(&ptable.lock);
 
-  p->state = RUNNABLE;
+  ptable.proc -> next = ptable.proc -> prev = p;
+  p -> next = p -> prev = ptable.proc;
+  p -> state = RUNNABLE;
 
   release(&ptable.lock);
 }

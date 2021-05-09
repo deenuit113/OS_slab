@@ -6,22 +6,26 @@
 #include "spinlock.h"
 #include "slab.h"
 
+typedef int bool;
+#define true 1
+#define false 0
+
 struct {
 	struct spinlock lock;
 	struct slab slab[NSLAB];
 } stable;
 
-int get_bit(char* size, int i)
+bool get_bit(char* size, int i)
 {
 	char *temp = size;
 	temp += (i / 8);
 	i = i - (i / 8) * 8;
 	unsigned char c = 0x80;
 	if((*(temp + i) & (c >> i)) != 0){
-		return 1;
+		return true;
 	}
 	else{
-		return 0;
+		return false;
 	}
 }
 
@@ -45,32 +49,32 @@ char* clear_bit(char* size, int i){
 
 
 void slabinit(){
-	struct slab *temp_slab;
 	int slab_size = 8;
-	initlock(&stable.lock, "slablock");
 	acquire(&stable.lock);
-	for(temp_slab = stable.slab; temp_slab < &stable.slab[NSLAB]; temp_slab++){
-		temp_slab -> size = slab_size;
-		temp_slab -> num_pages = 1;
-		temp_slab -> num_free_objects = 4096 / slab_size;
-		temp_slab -> num_used_objects = 0;
-		temp_slab -> num_objects_per_page = 4096 / slab_size;
-		temp_slab -> bitmap = kalloc();
-		temp_slab -> page[0] = kalloc();
-		slab_size = slab_size << 1;
+	for(int i = 0; i <= slab_size; i++){
+		stable.slab[i].size = slab_size << i;
+		stable.slab[i].num_pages = 1;
+		stable.slab[i].num_free_objects = PGSIZE >> (i+3);
+		stable.slab[i].num_used_objects = 0;
+		stable.slab[i].num_objects_per_page = PGSIZE >> (i+3);
+		stable.slab[i].bitmap = kalloc();
+		memset(stable.slab[i].bitmap, 0, PGSIZE);
+
+		stable.slab[i].page[0] = kalloc();
+		memset(stable.slab[i].page[0], 0, PGSIZE);
 	}
 	release(&stable.lock);
 }
 
 char *kmalloc(int size){
-	if(size > 2048){
+	if(size > 2048 || size <= 0){
 		return 0;
 	}
 
-	int snum = 0x00000001;
+	int pgsize = 0x00000001;
 
-	while(snum < size){
-		snum = snum << 1;
+	while(pgsize < size){
+		pgsize = pgsize << 1;
 	}
 
 	struct slab *slab;
@@ -78,7 +82,7 @@ char *kmalloc(int size){
 
 	acquire(&stable.lock);
 	for(slab = stable.slab; slab < &stable.slab[NSLAB]; slab++){
-		if(slab -> size == snum){
+		if(slab -> size == pgsize){
 			if(slab -> num_free_objects > 0){
 				char *objects = 0x0;
 				if((slab -> num_used_objects) < (slab -> num_objects_per_page)){
@@ -109,7 +113,7 @@ char *kmalloc(int size){
 						}
 					}
 					else{
-						cprintf("NOT ALLOCATED\n");
+						cprintf("ERROR\n");
 					       	release(&stable.lock);
 						return 0;
 					}
@@ -137,30 +141,32 @@ char *kmalloc(int size){
 
 void kmfree(char *addr){
 	struct slab *slab;
-	acquire(&stable.lock);
-	for(slab = stable.slab; slab < &stable.slab[NSLAB]; slab++){
-		int low = 0;
-		for(int i = 0; i < (slab -> num_pages); i++){
-			for(int j = 0; j < (slab -> num_objects_per_page); j++){
-				if(addr == slab -> page[i] + (j * slab -> size)){
-					slab -> num_free_objects++;
-					slab -> num_used_objects--;
-					clear_bit((slab -> bitmap), i *  slab -> num_objects_per_page + j);
-					if((slab -> num_used_objects) < ((slab -> num_pages - 1) + low) * slab -> num_objects_per_page){
-						slab -> num_free_objects -= slab -> num_objects_per_page;
-						kfree(slab -> page[slab -> num_pages - 1 + low]);
-						low -= 1;
+	if(size > 2048 || size <= 0){
+		acquire(&stable.lock);
+		for(slab = stable.slab; slab < &stable.slab[NSLAB]; slab++){
+			int count = 0;
+			for(int i = 0; i < (slab -> num_pages); i++){
+				for(int j = 0; j < (slab -> num_objects_per_page); j++){
+					if(addr == slab -> page[i] + (j * slab -> size)){
+						slab -> num_free_objects++;
+						slab -> num_used_objects--;
+						clear_bit((slab -> bitmap), i *  slab -> num_objects_per_page + j);
+						if((slab -> num_used_objects) < ((slab -> num_pages - 1) + count) * slab -> num_objects_per_page){
+							slab -> num_free_objects -= slab -> num_objects_per_page;
+							kfree(slab -> page[slab -> num_pages - 1 + count]);
+							count--;
+						}
+						release(&stable.lock);
+						slab -> num_pages += count;
+						return;
 					}
-					release(&stable.lock);
-					slab -> num_pages += low;
-					return;
 				}
 			}
+			slab -> num_pages += count;
 		}
-		slab -> num_pages += low;
+		release(&stable.lock);
+		return;
 	}
-	release(&stable.lock);
-	return;
 						
 }
 

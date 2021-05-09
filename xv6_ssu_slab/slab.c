@@ -141,32 +141,30 @@ char *kmalloc(int size){
 
 void kmfree(char *addr){
 	struct slab *slab;
-	if(size > 2048 || size <= 0){
-		acquire(&stable.lock);
-		for(slab = stable.slab; slab < &stable.slab[NSLAB]; slab++){
-			int count = 0;
-			for(int i = 0; i < (slab -> num_pages); i++){
-				for(int j = 0; j < (slab -> num_objects_per_page); j++){
-					if(addr == slab -> page[i] + (j * slab -> size)){
-						slab -> num_free_objects++;
-						slab -> num_used_objects--;
-						clear_bit((slab -> bitmap), i *  slab -> num_objects_per_page + j);
-						if((slab -> num_used_objects) < ((slab -> num_pages - 1) + count) * slab -> num_objects_per_page){
-							slab -> num_free_objects -= slab -> num_objects_per_page;
-							kfree(slab -> page[slab -> num_pages - 1 + count]);
-							count--;
-						}
-						release(&stable.lock);
-						slab -> num_pages += count;
-						return;
+	acquire(&stable.lock);
+	for(slab = stable.slab; slab < &stable.slab[NSLAB]; slab++){
+		int count = 0;
+		for(int i = 0; i < (slab -> num_pages); i++){
+			for(int j = 0; j < (slab -> num_objects_per_page); j++){
+				if(addr == slab -> page[i] + (j * slab -> size)){
+					slab -> num_free_objects++;
+					slab -> num_used_objects--;
+					clear_bit((slab -> bitmap), i *  slab -> num_objects_per_page + j);
+					if((slab -> num_used_objects) < ((slab -> num_pages - 1) + count) * slab -> num_objects_per_page){
+						slab -> num_free_objects -= slab -> num_objects_per_page;
+						kfree(slab -> page[slab -> num_pages - 1 + count]);
+						count--;
 					}
+					release(&stable.lock);
+					slab -> num_pages += count;
+					return;
 				}
 			}
-			slab -> num_pages += count;
 		}
-		release(&stable.lock);
-		return;
+		slab -> num_pages += count;
 	}
+	release(&stable.lock);
+	return;
 						
 }
 

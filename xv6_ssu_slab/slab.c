@@ -54,14 +54,14 @@ void slabinit(){
 	for(int i = 0; i <= slab_size; i++){
 		stable.slab[i].size = slab_size << i;
 		stable.slab[i].num_pages = 1;
-		stable.slab[i].num_free_objects = PGSIZE >> (i+3);
+		stable.slab[i].num_free_objects = 4096 / slab_size;
 		stable.slab[i].num_used_objects = 0;
-		stable.slab[i].num_objects_per_page = PGSIZE >> (i+3);
+		stable.slab[i].num_objects_per_page = 4096 / slab_size;
 		stable.slab[i].bitmap = kalloc();
-		memset(stable.slab[i].bitmap, 0, PGSIZE);
+		memset(stable.slab[i].bitmap, 0, 4096);
 
 		stable.slab[i].page[0] = kalloc();
-		memset(stable.slab[i].page[0], 0, PGSIZE);
+		memset(stable.slab[i].page[0], 0, 4096);
 	}
 	release(&stable.lock);
 }
